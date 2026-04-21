@@ -20,6 +20,7 @@ export default defineBuildConfig({
       "commander",
 
       "@modelcontextprotocol/sdk",
+      "@hono/node-server",
       "raw-body",
       "zod",
       "content-type",
@@ -33,6 +34,12 @@ export default defineBuildConfig({
       "statuses",
       "inherits",
       "toidentifier",
+      "ajv",
+      "ajv-formats",
+      "fast-deep-equal",
+      "json-schema-traverse",
+      "fast-uri",
+      "json-schema-typed",
 
       "zod-to-json-schema",
     ],

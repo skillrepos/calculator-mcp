@@ -5,7 +5,7 @@ import { program } from "commander";
 
 import packageJSON from "../package.json";
 
-import { createServer, startSSEServer } from "./server";
+import { createServer, startHttpServer } from "./server";
 
 /**
  * The version of the Agentica CLI
@@ -17,12 +17,12 @@ const VERSION = (process.env.SERVER_VERSION) ?? "0.0.0";
 program
   .version(VERSION)
   .name(packageJSON.name)
-  .option("--port <port>", "Port to listen on for SSE transport.")
+  .option("--port <port>", "Port to listen on for Streamable HTTP transport.")
   .action(async (options) => {
     if ("port" in options) {
       // eslint-disable-next-line ts/no-unsafe-member-access
-      console.log(`This server is running on SSE (http://localhost:${options.port}/sse?sessionId=<sessionId>)`);
-      await startSSEServer({
+      console.log(`This server is running on Streamable HTTP (http://localhost:${options.port}/mcp)`);
+      await startHttpServer({
         // eslint-disable-next-line ts/no-unsafe-member-access
         port: +options.port,
         name: packageJSON.name,

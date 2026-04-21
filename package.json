@@ -6,10 +6,10 @@
   "description": "Calculator MCP",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wrtnlabs/calculator-mcp"
+    "url": "https://github.com/skillrepos/calculator-mcp"
   },
   "bugs": {
-    "url": "https://github.com/wrtnlabs/calculator-mcp/issues"
+    "url": "https://github.com/skillrepos/calculator-mcp/issues"
   },
   "exports": {
     ".": {
@@ -29,7 +29,7 @@
     "package.json"
   ],
   "scripts": {
-    "prepare": "simple-git-hooks",
+    "prepare": "unbuild",
     "dev": "unbuild --stub",
     "lint": "eslint .",
     "format": "eslint . --fix",
@@ -39,7 +39,7 @@
     "release": "pnpm lint && pnpm prepack && publint && pnpm dlx bumpp"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^20.14.0",
     "@wrtnlabs/eslint-config": "^0.4.3",
     "commander": "^13.1.0",
@@ -51,8 +51,8 @@
     "std-env": "^3.9.0",
     "typescript": "^5.8.3",
     "unbuild": "^3.5.0",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.5"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"

@@ -1,26 +1,40 @@
-## Calculate MCP
+## Calculator MCP (classroom fork)
 
-A Model Context Protocol (MCP) server that provides browser automation capabilities using basic calculator feature.
-This server enables LLMs to interact with calculator.
-(I actually made it for a test program)
+A Model Context Protocol (MCP) server that provides basic calculator capabilities.
+This fork of [`wrtnlabs/calculator-mcp`](https://github.com/wrtnlabs/calculator-mcp) is used as a sample MCP server in training/classroom exercises at [`skillrepos/calculator-mcp`](https://github.com/skillrepos/calculator-mcp). It is **not published to npm** — it is intended to be run directly from this GitHub fork via `npx`.
+
+It supports two transports:
+
+- **stdio** (default) — for local MCP clients that spawn the server as a subprocess.
+- **Streamable HTTP** — the current standard HTTP transport for MCP (replaces the deprecated SSE transport).
 
 ### Use Cases
 
-- The test code for to connect MCP feature.
-- The toy projects
+- Classroom/training exercises for MCP clients and servers.
+- Toy projects and smoke-tests.
 
-### Example config
+### Running over stdio (default)
+
+Run the server as a subprocess of your MCP client:
+
+```bash
+npx -y github:skillrepos/calculator-mcp
+```
+
+The first run clones the repo and builds it; subsequent runs are cached by npx.
+
+Example client config:
 
 <!-- eslint-skip -->
 
 ```js
 {
   "mcpServers": {
-    "calculate": {
+    "calculator": {
       "command": "npx",
       "args": [
         "-y",
-        "@wrtnlabs/calculator-mcp@latest"
+        "github:skillrepos/calculator-mcp"
       ]
     }
   }
@@ -29,36 +43,41 @@ This server enables LLMs to interact with calculator.
 
 #### Installation in VS Code
 
-Alternatively, you can install the Playwright MCP server using the VS Code CLI:
-
 ```bash
 # For VS Code
-code --add-mcp '{"name":"calculator","command":"npx","args":["-y", "@wrtnlabs/calculator-mcp@latest"]}'
+code --add-mcp '{"name":"calculator","command":"npx","args":["-y","github:skillrepos/calculator-mcp"]}'
 ```
 
 ```bash
 # For VS Code Insiders
-code-insiders --add-mcp '{"name":"calculator","command":"npx","args":["-y", "@wrtnlabs/calculator-mcp@latest"]}'
+code-insiders --add-mcp '{"name":"calculator","command":"npx","args":["-y","github:skillrepos/calculator-mcp"]}'
 ```
 
-After installation, the Calculator MCP server will be available for use with your GitHub Copilot agent in VS Code.
+After installation the Calculator MCP server will be available for use with your GitHub Copilot agent in VS Code.
 
-### CLI Options
+### Running over Streamable HTTP
 
-The Calculator MCP server supports the following command-line options:
-
-- `--port <port>`: Port to listen on for SSE transport
-
-### Running headed browser on Linux w/o DISPLAY
-
-When running headed browser on system w/o display or from worker processes of the IDEs,
-run the MCP server from environment with the DISPLAY and pass the `--port` flag to enable SSE transport.
+Pass `--port <port>` to start an HTTP server that speaks the MCP **Streamable HTTP** transport. The endpoint is `POST/GET/DELETE /mcp` and sessions are tracked via the `mcp-session-id` header (per the MCP spec).
 
 ```bash
-npx @wrtnlabs/calculator-mcp@latest --port 8931
+npx -y github:skillrepos/calculator-mcp --port 8931
 ```
 
-And then in MCP client config, set the `url` to the SSE endpoint:
+On start-up you will see:
+
+```
+Listening on http://localhost:8931/mcp (Streamable HTTP)
+Put this in your client config:
+{
+  "mcpServers": {
+    "calculator": {
+      "url": "http://localhost:8931/mcp"
+    }
+  }
+}
+```
+
+Use the printed URL in an MCP client that supports the Streamable HTTP transport:
 
 <!-- eslint-skip -->
 
@@ -66,11 +85,51 @@ And then in MCP client config, set the `url` to the SSE endpoint:
 {
   "mcpServers": {
     "calculator": {
-      "url": "http://localhost:8931/sse"
+      "url": "http://localhost:8931/mcp"
     }
   }
 }
 ```
+
+> Note: the legacy `/sse` (Server-Sent Events) transport has been removed. If your client only supports SSE, upgrade it to a version that supports Streamable HTTP, or use the stdio transport.
+
+#### Quick smoke test with `curl`
+
+```bash
+# Initialize — capture the mcp-session-id response header
+curl -i -X POST http://localhost:8931/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+
+# Send the initialized notification (replace <SID>)
+curl -X POST http://localhost:8931/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: <SID>" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+# Call a tool
+curl -X POST http://localhost:8931/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: <SID>" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add","arguments":{"a":7,"b":5}}}'
+```
+
+### Running from a local clone
+
+```bash
+git clone https://github.com/skillrepos/calculator-mcp
+cd calculator-mcp
+pnpm install        # or: npm install
+pnpm build          # or: npm run build
+node bin/index.js --port 8931
+```
+
+### CLI Options
+
+- `--port <port>`: Port to listen on for Streamable HTTP transport. When omitted, the server runs on stdio.
 
 ### Programmatic usage with custom transports
 
@@ -83,7 +142,7 @@ const client = new Client({
   version: "0.1.0",
 });
 
-const server = createServer({
+const server = await createServer({
   name: "calculator",
   version: "1.0.0"
 });

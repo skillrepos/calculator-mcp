@@ -1,8 +1,10 @@
+import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 import http from "node:http";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { CallToolRequestSchema, isInitializeRequest, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 import { add, div, mod, mul, sqrt, sub } from "./tools";
 
@@ -49,45 +51,92 @@ export async function createServer(options: { name: string; version: string }) {
   return server;
 }
 
-export async function startSSEServer(options: { port: number; name: string; version: string }) {
-  const sessions = new Map<string, SSEServerTransport>();
+async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(chunk as Buffer);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (raw.length === 0) {
+    return undefined;
+  }
+  return JSON.parse(raw);
+}
+
+export async function startHttpServer(options: { port: number; name: string; version: string }) {
+  const transports = new Map<string, StreamableHTTPServerTransport>();
+
   // eslint-disable-next-line ts/no-misused-promises
   const httpServer = http.createServer(async (req, res) => {
-    switch (req.method) {
-      case "GET": {
-        const transport = new SSEServerTransport("/sse", res);
-        sessions.set(transport.sessionId, transport);
-        const server = await createServer(options);
-        res.on("close", () => {
-          sessions.delete(transport.sessionId);
-          server.close().catch(e => console.error(e));
-        });
-        await server.connect(transport);
+    try {
+      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+      const pathname = url.pathname.replace(/\/+$/, "") || "/";
+      if (pathname !== "/mcp") {
+        res.statusCode = 404;
+        res.end("Not found");
         return;
       }
-      case "POST": {
-        const searchParams = new URL(`http://localhost${req.url}`).searchParams;
-        const sessionId = searchParams.get("sessionId");
-        if (sessionId === null) {
+
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+      if (req.method === "POST") {
+        const body = await readJsonBody(req);
+
+        let transport: StreamableHTTPServerTransport | undefined;
+        if (sessionId !== undefined && transports.has(sessionId)) {
+          transport = transports.get(sessionId);
+        }
+        else if (sessionId === undefined && isInitializeRequest(body)) {
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (sid) => {
+              if (transport !== undefined) {
+                transports.set(sid, transport);
+              }
+            },
+          });
+          transport.onclose = () => {
+            if (transport?.sessionId !== undefined) {
+              transports.delete(transport.sessionId);
+            }
+          };
+          const server = await createServer(options);
+          await server.connect(transport);
+        }
+        else {
           res.statusCode = 400;
-          res.end("Missing sessionId");
-          return;
-        }
-        const transport = sessions.get(sessionId);
-        if (transport == null) {
-          res.statusCode = 404;
-          res.end("Session not found");
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "Bad Request: no valid session ID provided" },
+            id: null,
+          }));
           return;
         }
 
-        await transport.handlePostMessage(req, res);
+        await transport!.handleRequest(req, res, body);
         return;
       }
 
-      case undefined:
-      default: {
-        res.statusCode = 405;
-        res.end("Method not allowed");
+      if (req.method === "GET" || req.method === "DELETE") {
+        if (sessionId === undefined || !transports.has(sessionId)) {
+          res.statusCode = 400;
+          res.end("Invalid or missing session ID");
+          return;
+        }
+        const transport = transports.get(sessionId)!;
+        await transport.handleRequest(req, res);
+        return;
+      }
+
+      res.statusCode = 405;
+      res.end("Method not allowed");
+    }
+    catch (error) {
+      console.error(error);
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end("Internal server error");
       }
     }
   });
@@ -115,12 +164,12 @@ export async function startSSEServer(options: { port: number; name: string; vers
       return `http://${resolvedHost}:${resolvedPort}`;
     })();
 
-    console.log(`Listening on ${url}`);
+    console.log(`Listening on ${url}/mcp (Streamable HTTP)`);
     console.log("Put this in your client config:");
     console.log(JSON.stringify({
       mcpServers: {
         calculator: {
-          url: `${url}/sse`,
+          url: `${url}/mcp`,
         },
       },
     }, undefined, 2));
