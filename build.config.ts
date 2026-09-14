@@ -5,6 +5,7 @@ import pkgJson from "./package.json";
 
 export default defineBuildConfig({
   outDir: "dist",
+  failOnWarn: false,
   entries: [
     "src/index.ts",
     "src/cli.ts",
@@ -18,9 +19,9 @@ export default defineBuildConfig({
     emitCJS: true,
     inlineDependencies: [
       "commander",
-
       "@modelcontextprotocol/sdk",
       "@hono/node-server",
+      "hono",
       "raw-body",
       "zod",
       "content-type",
